@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PokéBoh v1.1</title>
+    <style>
+        body { background-color: #2c3e50; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; font-family: 'Courier New', Courier, monospace; }
+        #pokedex { background-color: #dd0b2d; width: 380px; height: 720px; border-radius: 20px; border: 4px solid #8b0000; box-shadow: 10px 10px 20px rgba(0,0,0,0.5); display: flex; flex-direction: column; padding: 20px; box-sizing: border-box; }
+        #header { display: flex; align-items: center; margin-bottom: 20px; }
+        .big-lens { width: 65px; height: 65px; background: radial-gradient(circle at 20px 20px, #5fc3ff, #005a99); border-radius: 50%; border: 5px solid #ffffff; box-shadow: 0 0 10px rgba(0,0,0,0.5); }
+        .led { width: 15px; height: 15px; border-radius: 50%; margin-left: 10px; border: 2px solid #333; }
+        .led.red { background-color: #ff0000; } .led.yellow { background-color: #ffcc00; } .led.green { background-color: #32cd32; }
+        
+        #screen-container { background-color: #dedede; border-radius: 10px; padding: 15px; flex-grow: 1; display: flex; flex-direction: column; border: 3px solid #888; border-bottom-left-radius: 40px; position: relative; overflow: hidden; }
+        #screen { background-color: #98fb98; flex-grow: 1; border: 2px solid #555; border-radius: 5px; padding: 10px; overflow-y: auto; font-size: 15px; color: #003300; position: relative; }
+        #chat-log p { margin: 5px 0; border-bottom: 1px dotted #6ebf6e; padding-bottom: 5px; line-height: 1.3;}
+        
+        #controls { margin-top: 20px; display: flex; flex-direction: column; gap: 15px; }
+        input[type="text"] { padding: 12px; border-radius: 5px; border: 2px solid #333; font-size: 16px; outline: none; background-color: #fff; }
+        input[type="text"]:disabled { background-color: #ccc; }
+        .btn-group { display: flex; gap: 10px; }
+        button { flex: 1; padding: 15px; border-radius: 10px; border: 2px solid #333; font-weight: bold; font-size: 16px; cursor: pointer; text-transform: uppercase; transition: transform 0.1s; }
+        button:active { transform: scale(0.95); }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-ask { background-color: #32cd32; color: white; } 
+        .btn-solve { background-color: #ffcc00; color: black; }
+        .btn-start { background-color: #3498db; color: white; margin-top: 5px; }
+
+        /* --- SCHERMATA FINALE ADATTIVA --- */
+        #end-screen { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; flex-direction: column; justify-content: center; align-items: center; z-index: 10; border-radius: 5px; }
+        #pokeball-anim { width: 70px; height: 70px; display: none; }
+        
+        /* Animazioni */
+        .shake { animation: dondolo 0.8s ease-in-out infinite; }
+        @keyframes dondolo { 0% { transform: rotate(0deg); } 25% { transform: rotate(-25deg); } 50% { transform: rotate(0deg); } 75% { transform: rotate(25deg); } 100% { transform: rotate(0deg); } }
+        
+        .flash-win { animation: white-flash 0.6s ease-out forwards; }
+        .flash-lose { animation: red-flash 0.6s ease-out forwards; }
+        @keyframes white-flash { 0% { background-color: white; opacity: 1; } 100% { background-color: #98fb98; opacity: 1; } }
+        @keyframes red-flash { 0% { background-color: #ff4d4d; opacity: 1; } 100% { background-color: #2a0808; opacity: 1; } }
+        
+        #pokemon-sprite { width: 130px; height: 130px; image-rendering: pixelated; display: none; z-index: 12; }
+        .end-title-text { font-size: 26px; font-weight: bold; margin-top: 15px; display: none; animation: blink 0.8s infinite; text-shadow: 2px 2px #000; text-align: center; }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+    </style>
+</head>
+<body>
+
+<div id="pokedex">
+    <div id="header">
+        <div class="big-lens"></div><div class="led red" id="led-red"></div><div class="led yellow"></div><div class="led green" id="led-green"></div>
+    </div>
+    
+    <div id="screen-container">
+        <div id="screen">
+            <p><strong>[PokéBoh Sistema]</strong></p>
+            <p id="pa-display">Punti Azione: --</p>
+            <hr style="border-top: 1px solid #003300;">
+            <div id="chat-log">
+                <p>Caricamento database Pokémon in corso...</p>
+            </div>
+            
+            <div id="end-screen">
+                <img id="pokeball-anim" src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/poke-ball.png" alt="Pokeball">
+                <img id="pokemon-sprite" src="" alt="Pokemon">
+                <div id="end-title" class="end-title-text"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="controls">
+        <input type="text" id="userInput" list="pokemon-list" placeholder="Attendi caricamento..." disabled>
+        <datalist id="pokemon-list"></datalist>
+
+        <div class="btn-group">
+            <button class="btn-ask" id="btn-ask" onclick="faiDomanda()" disabled>Domanda</button>
+            <button class="btn-solve" id="btn-solve" onclick="tentaSoluzione()" disabled>Soluzione</button>
+        </div>
+        <button class="btn-start" id="btn-start" onclick="avviaPartita()" disabled>Nuova Partita</button>
+    </div>
+</div>
+
+<script>
+    const serverUrl = '/api';
+    let puntiAttuali = 25;
+    let dizionarioPokemon = []; // Contiene tutti i 1025 nomi per il filtro anti-cheat
+
+    // CARICAMENTO AUTOMATICO DI TUTTI I POKÉMON NELLA TENDINA
+    window.onload = async () => {
+        try {
+            const res = await fetch('https://pokeapi.co/api/v2/pokemon?limit=1025');
+            const data = await res.json();
+            const datalist = document.getElementById('pokemon-list');
+            
+            dizionarioPokemon = data.results.map(p => p.name.toLowerCase());
+            
+            dizionarioPokemon.forEach(nome => {
+                const opzione = document.createElement('option');
+                opzione.value = nome.charAt(0).toUpperCase() + nome.slice(1); // Nome con iniziale maiuscola
+                datalist.appendChild(opzione);
+            });
+
+            document.getElementById('chat-log').innerHTML = '<p>Pronto! Clicca su "NUOVA PARTITA" per iniziare.</p>';
+            document.getElementById('btn-start').disabled = false;
+            document.getElementById('userInput').placeholder = "Scrivi qui...";
+        } catch (e) {
+            document.getElementById('chat-log').innerHTML = '<p style="color:red;">Errore nel caricamento del database.</p>';
+        }
+    };
+
+    function addLog(mittente, testo, colore = '#003300') {
+        const chat = document.getElementById('chat-log');
+        chat.innerHTML += `<p style="color:${colore}"><strong>${mittente}:</strong> ${testo}</p>`;
+        document.getElementById('screen').scrollTop = document.getElementById('screen').scrollHeight;
+    }
+
+    function aggiornaPA(punti) {
+        document.getElementById('pa-display').innerText = `Punti Azione: ${punti}`;
+    }
+
+    function abilitaComandi(stato) {
+        document.getElementById('userInput').disabled = !stato;
+        document.getElementById('btn-ask').disabled = !stato;
+        document.getElementById('btn-solve').disabled = !stato;
+    }
+
+    // --- AVVIA PARTITA ---
+    async function avviaPartita() {
+        document.getElementById('chat-log').innerHTML = '';
+        document.getElementById('end-screen').style.display = 'none';
+        document.getElementById('end-screen').className = ''; 
+        addLog("Sistema", "Estrazione del Pokémon segreto in corso...");
+        
+        try {
+            const res = await fetch(`${serverUrl}/nuova-partita`);
+            const data = await res.json();
+            addLog("Sistema", data.messaggio);
+            aggiornaPA(data.puntiAzione);
+            abilitaComandi(true);
+            document.getElementById('userInput').focus();
+        } catch (e) {
+            addLog("Errore", "Server offline. Hai digitato 'npm start' nel terminale?");
+        }
+    }
+
+    // --- FAI DOMANDA + FILTRO ANTI-CHEAT ---
+    async function faiDomanda() {
+        const input = document.getElementById('userInput');
+        const domanda = input.value.trim();
+        if (domanda === '') return;
+
+        // VERIFICA ANTI-CHEAT INTEGRATA SULLA TENDINA
+        const domandaMinuscola = domanda.toLowerCase();
+        let pokemonRilevato = "";
+        
+        for (let nome of dizionarioPokemon) {
+            // Verifica se la parola esatta del Pokémon è scritta nella domanda
+            if (domandaMinuscola.includes(nome) && nome.length > 2) {
+                pokemonRilevato = nome;
+                break;
+            }
+        }
+
+        if (pokemonRilevato !== "") {
+            addLog("Tu", domanda);
+            addLog("SISTEMA", `ERRORE: Non puoi nominare "${pokemonRilevato.toUpperCase()}" nelle domande! Usa il pulsante "Soluzione" se vuoi indovinare.`, "orange");
+            input.value = '';
+            return;
+        }
+
+        input.value = '';
+        addLog("Tu", domanda);
+        addLog("IA", "<em>Analisi in corso...</em>");
+        abilitaComandi(false);
+
+        try {
+            const res = await fetch(`${serverUrl}/fai-domanda`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ domanda: domanda })
+            });
+            const data = await res.json();
+            
+            const chat = document.getElementById('chat-log');
+            chat.removeChild(chat.lastChild); // Rimuove "Analisi in corso..."
+
+            if (data.gameOver) {
+                aggiornaPA(0);
+                eseguiCinematicaFinale(false, data.sprite, data.verso, data.nome);
+            } else {
+                addLog("IA", data.risposta);
+                aggiornaPA(data.puntiRimanenti);
+                abilitaComandi(true);
+                input.focus();
+            }
+        } catch (e) {
+            addLog("Errore", "Connessione persa.");
+            abilitaComandi(true);
+        }
+    }
+
+    // --- TENTA LA SOLUZIONE ---
+    async function tentaSoluzione() {
+        const input = document.getElementById('userInput');
+        const tentativo = input.value.trim();
+        if (tentativo === '') return;
+
+        input.value = '';
+        addLog("Tu", `Soluzione tentata: ${tentativo.toUpperCase()}`);
+        abilitaComandi(false);
+
+        try {
+            const res = await fetch(`${serverUrl}/tenta-soluzione`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tentativo: tentativo })
+            });
+            const data = await res.json();
+
+            if (data.vittoria) {
+                eseguiCinematicaFinale(true, data.sprite, data.verso);
+            } else if (data.gameOver) {
+                aggiornaPA(0);
+                eseguiCinematicaFinale(false, data.sprite, data.verso, data.nome);
+            } else {
+                addLog("Sistema", `Sbagliato! Perdi 2 PA.`, "red");
+                aggiornaPA(data.puntiRimanenti);
+                abilitaComandi(true);
+                input.focus();
+            }
+        } catch (e) {
+            addLog("Errore", "Connessione persa.");
+            abilitaComandi(true);
+        }
+    }
+
+    // --- REGIA CINEMATOGRAFICA FINALE (VITTORIA O SCONFITTA) ---
+    function eseguiCinematicaFinale(isVittoria, urlSprite, urlVerso, nomePokemon = "") {
+        const endScreen = document.getElementById('end-screen');
+        const pokeball = document.getElementById('pokeball-anim');
+        const sprite = document.getElementById('pokemon-sprite');
+        const titolo = document.getElementById('end-title');
+        
+        sprite.src = urlSprite;
+        endScreen.style.display = 'flex';
+        pokeball.style.display = 'block';
+        sprite.style.display = 'none';
+        titolo.style.display = 'none';
+
+        if (isVittoria) {
+            // Se vince dondola ed esce trionfante
+            pokeball.classList.add('shake');
+            
+            setTimeout(() => {
+                pokeball.style.display = 'none';
+                pokeball.classList.remove('shake');
+                endScreen.classList.add('flash-win');
+                
+                titolo.innerText = "VITTORIA!";
+                titolo.style.color = "#d32f2f";
+                sprite.style.display = 'block';
+                titolo.style.display = 'block';
+                
+                if(urlVerso) { new Audio(urlVerso).play().catch(e => {}); }
+                
+                setTimeout(() => {
+                    const audioJingle = new Audio('https://vgmsite.com/soundtracks/pokemon-gameboy-sound-collection/pjdruoeq/108-item%20get.mp3');
+                    audioJingle.play().catch(e => {});
+                }, 800);
+            }, 1500);
+
+        } else {
+            // SCONFITTA: La Pokeball appare ma si rompe subito rivelando chi hai perso
+            pokeball.classList.add('shake');
+            
+            setTimeout(() => {
+                pokeball.style.display = 'none';
+                pokeball.classList.remove('shake');
+                endScreen.classList.add('flash-lose'); // Schermo rosso cupo retro
+                
+                titolo.innerHTML = `SCONFITTA!<br><span style="font-size:16px; color:#fff;">Era ${nomePokemon.toUpperCase()}</span>`;
+                titolo.style.color = "#ff4d4d";
+                sprite.style.display = 'block';
+                titolo.style.display = 'block';
+                
+                // Suona solo il verso del pokémon rimasto imbattuto
+                if(urlVerso) { new Audio(urlVerso).play().catch(e => {}); }
+            }, 1000);
+        }
+    }
+    
+    // Invio con la tastiera
+    document.getElementById("userInput").addEventListener("keypress", function(event) {
+        if (event.key === "Enter") {
+            event.preventDefault();
+            faiDomanda();
+        }
+    });
+</script>
+</body>
+</html>
