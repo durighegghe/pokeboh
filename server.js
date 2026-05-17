@@ -100,7 +100,7 @@ app.post('/api/fai-domanda', async (req, res) => {
     } catch (errore) {
         res.json({
             risposta: "Non lo so (Errore dell'IA).",
-            puntiRimanenti: partita.p滅tiAzione
+            puntiRimanenti: partita.putiAzione
         });
     }
 });
