@@ -1,4 +1,4 @@
-// server.js (Versione Cloud Corretta)
+// server.js (Versione Finale - Blindata e Corretta)
 const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
@@ -8,7 +8,6 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// 🟢 REGOLA DI SICUREZZA: Legge in automatico la chiave che hai messo su Render!
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 let partita = {
@@ -19,7 +18,6 @@ let partita = {
     puntiAzione: 25
 };
 
-// 🟢 LA RIGA MANCANTE: Dice al server di mostrare la grafica di index.html alla pagina principale
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
@@ -68,7 +66,7 @@ app.post('/api/fai-domanda', async (req, res) => {
 
     if (!GEMINI_API_KEY) {
         return res.json({
-            risposta: "[SISTEMA] Errore: Render non ha letto correttamente la chiave API!",
+            risposta: "[SISTEMA] Errore: Chiave API non trovata su Render!",
             puntiRimanenti: partita.puntiAzione
         });
     }
@@ -80,7 +78,7 @@ app.post('/api/fai-domanda', async (req, res) => {
         2. Se nella domanda l'utente nomina direttamente un qualsiasi Pokémon (es: "È l'evoluzione di Haunter?"), devi ignorare la risposta e scrivere esattamente: "[SISTEMA] ERRORE: Usa il pulsante Soluzione per tentare di indovinare!".
         3. Usa la tua enorme conoscenza sul mondo Pokémon per rispondere anche a domande strane, anatomiche, di lore o abitudini (es: se usa la coda per mangiare, se ha le ali, se appare nell'anime, ecc.).`;
 
-        const urlGemini = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+        const urlGemini = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
         
         const payload = {
             contents: [{
@@ -98,9 +96,10 @@ app.post('/api/fai-domanda', async (req, res) => {
         });
 
     } catch (errore) {
+        console.error("Errore di chiamata a Google:", errore.message);
         res.json({
-            risposta: "Non lo so (Errore dell'IA).",
-            puntiRimanenti: partita.putiAzione
+            risposta: "Non lo so (Errore di comunicazione con l'IA).",
+            puntiRimanenti: partita.puntiAzione
         });
     }
 });
@@ -132,6 +131,5 @@ app.post('/api/tenta-soluzione', (req, res) => {
     }
 });
 
-// Usa la porta dinamica fornita da Render o la 3000 locale
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Server PokéBoh attivo sulla porta ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Server PokéBoh pronto sulla porta ${PORT}!`));
