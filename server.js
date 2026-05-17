@@ -1,15 +1,15 @@
-// server.js
+// server.js (Versione Cloud Corretta)
 const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
+const path = require('path');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
-app.use(express.static(__dirname));
 
-// 🔴 METTI QUI LA TUA CHIAVE API GRATUITA DI GEMINI 🔴
-const GEMINI_API_KEY = "AIzaSyCmoMpdDvTWzCH0puTwWc5Eu78fcz7Pv3Y";
+// 🟢 REGOLA DI SICUREZZA: Legge in automatico la chiave che hai messo su Render!
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 let partita = {
     inCorso: false,
@@ -18,6 +18,11 @@ let partita = {
     verso: "",
     puntiAzione: 25
 };
+
+// 🟢 LA RIGA MANCANTE: Dice al server di mostrare la grafica di index.html alla pagina principale
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
 
 // --- AVVIA NUOVA PARTITA ---
 app.get('/api/nuova-partita', async (req, res) => {
@@ -34,9 +39,7 @@ app.get('/api/nuova-partita', async (req, res) => {
             puntiAzione: 25
         };
 
-        console.log(`\n🔮 [SERVER] Nuova partita iniziata!`);
-        console.log(`🎯 [SERVER] Il Pokémon segreto è: ${partita.nomePokemon.toUpperCase()}\n`);
-        
+        console.log(`🎯 [SERVER] Il Pokémon segreto è: ${partita.nomePokemon.toUpperCase()}`);
         res.json({ messaggio: "Nuovo Pokémon pronto nel Pokédex! Fai la tua prima domanda.", puntiAzione: partita.puntiAzione });
 
     } catch (errore) {
@@ -52,7 +55,6 @@ app.post('/api/fai-domanda', async (req, res) => {
     
     partita.puntiAzione -= 1;
 
-    // Se finisce i punti con questa domanda, è Game Over
     if (partita.puntiAzione <= 0) {
         partita.inCorso = false;
         return res.json({ 
@@ -64,22 +66,20 @@ app.post('/api/fai-domanda', async (req, res) => {
         });
     }
 
-    if (GEMINI_API_KEY === "COPIA_QUI_LA_TUA_CHIAVE") {
+    if (!GEMINI_API_KEY) {
         return res.json({
-            risposta: "[SISTEMA] Errore: Non hai inserito la chiave API dentro server.js!",
+            risposta: "[SISTEMA] Errore: Render non ha letto correttamente la chiave API!",
             puntiRimanenti: partita.puntiAzione
         });
     }
 
     try {
-        // Prepariamo le istruzioni segrete per l'IA
         const systemPrompt = `Sei l'arbitro incorruttibile del gioco 'PokéBoh'. Il Pokémon segreto estratto è: ${partita.nomePokemon}.
         Il giocatore ti farà una domanda su di lui. Tu devi rispondere seguendo tassativamente queste regole:
         1. Rispondi SOLO E SOLTANTO con una di queste tre opzioni: "Sì.", "No.", "Non lo so.". Non aggiungere mai spiegazioni, dettagli o altra punteggiatura.
         2. Se nella domanda l'utente nomina direttamente un qualsiasi Pokémon (es: "È l'evoluzione di Haunter?"), devi ignorare la risposta e scrivere esattamente: "[SISTEMA] ERRORE: Usa il pulsante Soluzione per tentare di indovinare!".
         3. Usa la tua enorme conoscenza sul mondo Pokémon per rispondere anche a domande strane, anatomiche, di lore o abitudini (es: se usa la coda per mangiare, se ha le ali, se appare nell'anime, ecc.).`;
 
-        // Chiamata API ufficiale a Gemini
         const urlGemini = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
         
         const payload = {
@@ -89,11 +89,7 @@ app.post('/api/fai-domanda', async (req, res) => {
         };
 
         const rispostaGemini = await axios.post(urlGemini, payload);
-        
-        // Estraiamo il testo pulito risposto da Gemini
         let rispostaIA = rispostaGemini.data.candidates[0].content.parts[0].text.trim();
-
-        // Pulizia finale da spazi o a capo molesti
         rispostaIA = rispostaIA.replace(/[\n\r]/g, "");
 
         res.json({
@@ -102,10 +98,9 @@ app.post('/api/fai-domanda', async (req, res) => {
         });
 
     } catch (errore) {
-        console.error("Errore IA:", errore.message);
         res.json({
-            risposta: "Non lo so (Errore di comunicazione con l'IA).",
-            puntiRimanenti: partita.puntiAzione
+            risposta: "Non lo so (Errore dell'IA).",
+            puntiRimanenti: partita.p滅tiAzione
         });
     }
 });
@@ -137,5 +132,6 @@ app.post('/api/tenta-soluzione', (req, res) => {
     }
 });
 
-const PORT = 3000;
-app.listen(PORT, () => console.log(`🚀 Server PokéBoh con IA attiva su http://localhost:${PORT}`));
+// Usa la porta dinamica fornita da Render o la 3000 locale
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`🚀 Server PokéBoh attivo sulla porta ${PORT}`));
